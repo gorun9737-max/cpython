@@ -1,94 +1,57 @@
-package org.python.testbed
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
 
-import android.content.Context
-import android.os.*
-import android.system.Os
-import android.widget.TextView
-import androidx.appcompat.app.*
-import org.json.JSONArray
-import java.io.*
+def generate_report(mix, test_results, ai_recommendation):
+    doc = SimpleDocTemplate("Mix_Report.pdf", pagesize=letter)
+    story = []
 
+    # Title
+    story.append(Paragraph("EPDM/HTPB Mix Report", styles["Heading1"]))
+    story.append(Spacer(1, 12))
 
-// Launching the tests from an activity is OK for a quick check, but for
-// anything more complicated it'll be more convenient to use `android.py test`
-// to launch the tests via PythonSuite.
-class MainActivity : AppCompatActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        val status = PythonTestRunner(this).run("""["-m", "test", "-W", "-uall"]""")
-        findViewById<TextView>(R.id.tvHello).text = "Exit status $status"
-    }
-}
+    # Mix Formula
+    story.append(Paragraph("Mix Formula (PHR):", styles["Heading2"]))
+    data = [
+        ["Material", "PHR"],
+        ["EPDM", mix["EPDM"]],
+        ["HTPB", mix["HTPB"]],
+        ["Kevlar", mix["Kevlar"]],
+        ["Carbon Black", mix["CarbonBlack"]],
+    ]
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 12))
 
+    # Test Results
+    story.append(Paragraph("Test Results:", styles["Heading2"]))
+    data = [
+        ["Property", "Value"],
+        ["Erosion Rate", f"{test_results['erosion_rate']} mm/s"],
+        ["Tensile Strength", f"{test_results['tensile_strength']} MPa"],
+        ["Elongation", f"{test_results['elongation']}%"],
+    ]
+    table = Table(data)
+    story.append(table)
+    story.append(Spacer(1, 12))
 
-class PythonTestRunner(val context: Context) {
-    /** Run Python.
-     *
-     * @param args Python command-line, encoded as JSON.
-     * @return The Python exit status: zero on success, nonzero on failure. */
-    fun run(args: String) : Int {
-        // We leave argument 0 as an empty string, which is a placeholder for the
-        // executable name in embedded mode.
-        val argsJsonArray = JSONArray(args)
-        val argsStringArray = Array<String>(argsJsonArray.length() + 1) { it -> ""}
-        for (i in 0..<argsJsonArray.length()) {
-            argsStringArray[i + 1] = argsJsonArray.getString(i)
-        }
+    # AI Recommendation
+    story.append(Paragraph("AI Recommendation:", styles["Heading2"]))
+    story.append(Paragraph(ai_recommendation))
 
-        // Python needs this variable to help it find the temporary directory,
-        // but Android only sets it on API level 33 and later.
-        Os.setenv("TMPDIR", context.cacheDir.toString(), false)
+    doc.build(story)
+    print("Report generated: Mix_Report.pdf")
 
-        val pythonHome = extractAssets()
-        System.loadLibrary("main_activity")
-        redirectStdioToLogcat()
-        return runPython(pythonHome.toString(), argsStringArray)
-    }
-
-    private fun extractAssets() : File {
-        val pythonHome = File(context.filesDir, "python")
-        if (pythonHome.exists() && !pythonHome.deleteRecursively()) {
-            throw RuntimeException("Failed to delete $pythonHome")
-        }
-        extractAssetDir("python", context.filesDir)
-
-        // Empty directories are lost in the asset packing/unpacking process.
-        val cwd = File(pythonHome, "cwd")
-        if (!cwd.exists()) {
-            cwd.mkdir()
-        }
-
-        return pythonHome
-    }
-
-    private fun extractAssetDir(path: String, targetDir: File) {
-        val names = context.assets.list(path)
-            ?: throw RuntimeException("Failed to list $path")
-        val targetSubdir = File(targetDir, path)
-        if (!targetSubdir.mkdirs()) {
-            throw RuntimeException("Failed to create $targetSubdir")
-        }
-
-        for (name in names) {
-            val subPath = "$path/$name"
-            val input: InputStream
-            try {
-                input = context.assets.open(subPath)
-            } catch (e: FileNotFoundException) {
-                extractAssetDir(subPath, targetDir)
-                continue
-            }
-            input.use {
-                // Undo the .gz workaround from build.gradle.kts.
-                val outputName = name.replace(Regex("""(.*)-"""), "$1")
-                File(targetSubdir, outputName).outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-        }
-    }
-
-    private external fun redirectStdioToLogcat()
-    private external fun runPython(home: String, args: Array<String>) : Int
-}
+# Example usage
+mix = {"EPDM": 90, "HTPB": 10, "Kevlar": 12, "CarbonBlack": 25}
+test_results = {"erosion_rate": 0.06, "tensile_strength": 10.2, "elongation": 78}
+ai_recommendation = "Increase ATH by 2 PHR for better ablation resistance."
+generate_report(mix, test_results, ai_recommendation)
